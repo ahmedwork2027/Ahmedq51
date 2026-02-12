@@ -1,26 +1,21 @@
 import streamlit as st
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 st.title("تطبيق دردشة ذكي 🤖")
 st.write("اكتب رسالتك وسوف يجيب النموذج تلقائيًا:")
 
-# تحميل النموذج
 @st.cache_resource
 def load_model():
     tokenizer = AutoTokenizer.from_pretrained("microsoft/DialoGPT-medium")
     model = AutoModelForCausalLM.from_pretrained("microsoft/DialoGPT-medium")
-    generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
-    return generator
+    return tokenizer, model
 
-generator = load_model()
+tokenizer, model = load_model()
 
-# إدخال المستخدم
 user_input = st.text_input("اكتب رسالتك هنا:")
 
-if st.button("أرسل"):
-    if user_input.strip() != "":
-        with st.spinner("جارٍ تجهيز الرد..."):
-            response = generator(user_input, max_length=100, do_sample=True, top_k=50, top_p=0.95)
-            st.success(response[0]['generated_text'])
-    else:
-        st.warning("الرجاء كتابة نص قبل الضغط على أرسل!")
+if st.button("أرسل") and user_input.strip() != "":
+    input_ids = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors="pt")
+    chat_history_ids = model.generate(input_ids, max_length=1000, pad_token_id=tokenizer.eos_token_id)
+    response = tokenizer.decode(chat_history_ids[:, input_ids.shape[-1]:][0], skip_special_tokens=True)
+    st.success(response)
