@@ -1,74 +1,41 @@
 import streamlit as st
 from PIL import Image
-import torch
-from torchvision import models, transforms
-import random
+import requests
+from googleapiclient.discovery import build
 
-# إعداد الصفحة
-st.set_page_config(page_title="تشخيص الأمراض المجهريّة البيطرية", layout="wide")
-st.title("🦠 تشخيص الأمراض المجهريّة البيطرية من الصور")
-st.write("ارفع صورة مجهريّة وسيحاول التطبيق تحديد المرض المحتمل.")
+st.set_page_config(page_title="تشخيص الصور المجهريّة البيطرية", layout="wide")
+
+st.title("تشخيص الصور المجهريّة البيطرية 🐾🔬")
+st.write("ارفع صورة مجهريّة للحصول على تحليل ونتائج بحث متعلقة بها.")
 
 # رفع الصورة
-uploaded_file = st.file_uploader("اختر صورة مجهريّة...", type=["png", "jpg", "jpeg"])
+uploaded_file = st.file_uploader("اختر صورة...", type=["jpg", "png", "jpeg"])
+if uploaded_file:
+    image = Image.open(uploaded_file)
+    st.image(image, caption='الصورة المرفوعة', use_column_width=True)
 
-# تحويل الصورة للنموذج
-transform = transforms.Compose([
-    transforms.Resize((224,224)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])
-])
+    st.write("🔍 جاري البحث عن أمراض مشابهة على الإنترنت...")
 
-# نموذج جاهز لتجربة التطبيق (يمكن تغييره لاحقًا لنموذج مدرّب على الأمراض المجهريّة)
-@st.cache_resource
-def load_model():
-    model = models.resnet18(pretrained=True)
-    model.eval()
-    return model
+    # تحويل الصورة إلى وصف نصي (تجريبي - يمكن تعديل)
+    description = st.text_input("أدخل وصف مختصر للصورة (مثلاً: خلية دم مصابة بـ Brucella)")
 
-model = load_model()
+    if description:
+        # ==== إعداد Google Custom Search ====
+        api_key = "YOUR_GOOGLE_API_KEY"        # ضع مفتاحك هنا
+        cse_id = "YOUR_CUSTOM_SEARCH_ENGINE_ID" # ضع معرف محرك البحث المخصص هنا
 
-# قائمة الأمراض البيطرية المجهريّة (قابلة للتطوير لاحقًا)
-disease_labels = [
-    "بابيزيوسيس - Babesiosis",
-    "ثيليريوزيز - Theileriosis",
-    "تريبانوسوما - Trypanosomiasis",
-    "أنيبلازما - Anaplasmosis",
-    "ليبتوسبيروزيس - Leptospirosis",
-    "إريثروسيت ميكروب - Erythrocytic Parasite",
-    "غير معروف - Unknown"
-]
+        def google_search(query, api_key, cse_id, num=5):
+            service = build("customsearch", "v1", developerKey=api_key)
+            res = service.cse().list(q=query, cx=cse_id, num=num).execute()
+            return res['items']
 
-# دالة التشخيص
-def predict_image(image):
-    try:
-        img = transform(image).unsqueeze(0)
-        with torch.no_grad():
-            outputs = model(img)
-        # اختيار نتيجة عشوائية للتجربة
-        return random.choice(disease_labels)
-    except Exception as e:
-        st.error(f"حدث خطأ أثناء التحليل: {e}")
-        return "خطأ في التشخيص"
-
-# معالجة الصورة والتشخيص
-if uploaded_file is not None:
-    try:
-        image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="الصورة المرفوعة", use_column_width=True)
-        st.write("")
-        st.write("⚡ جاري التشخيص…")
-        
-        diagnosis = predict_image(image)
-        st.success(f"✅ التشخيص المحتمل: **{diagnosis}**")
-        st.info("ℹ️ يمكن تطوير النموذج لاحقًا لإعطاء نتائج دقيقة جدًا باستخدام مكتبة صور مجهريّة أكبر.")
-    except Exception as e:
-        st.error(f"حدث خطأ أثناء رفع الصورة: {e}")
-
-# قسم المساعدة
-st.markdown("""
-### المساعدة / Help
-- ارفع صورة مجهريّة واضحة.  
-- النموذج يعطي تشخيصًا مبدئيًا يعتمد على الصور.  
-- يمكن تطوير النموذج لاحقًا بإضافة مكتبة صور لكل الأمراض المجهريّة البيطرية.
-""")
+        try:
+            results = google_search(description, api_key, cse_id)
+            st.success("✅ تم العثور على نتائج:")
+            for r in results:
+                st.write(f"**{r['title']}**")
+                st.write(r['link'])
+                st.write(r['snippet'])
+                st.write("---")
+        except Exception as e:
+            st.error(f"حدث خطأ أثناء البحث: {e}")
